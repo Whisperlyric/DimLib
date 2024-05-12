@@ -13,6 +13,7 @@ import qouteall.dimlib.DimLibNetworking;
 
 @Mixin(PlayerList.class)
 public class MixinPlayerList {
+    // send it right after login packet
     @Inject(
         method = "placeNewPlayer",
         at = @At(

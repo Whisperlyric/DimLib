@@ -17,6 +17,8 @@ public class DimLibEntry implements ModInitializer {
 	public void onInitialize() {
 		LOGGER.info("DimLib initializing");
 		
+		DimLibNetworking.init();
+		
 		DynamicDimensionsImpl.init();
 		
 		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {

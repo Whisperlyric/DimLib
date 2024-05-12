@@ -2,6 +2,7 @@ package qouteall.dimlib;
 
 import com.mojang.serialization.Lifecycle;
 import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -44,7 +45,7 @@ public class DimensionImpl {
                 levelStems.register(
                     ResourceKey.create(Registries.LEVEL_STEM, dimensionId),
                     levelStem,
-                    Lifecycle.stable()
+                    RegistrationInfo.BUILT_IN // use built-in registration info for now
                 );
             }
             finally {

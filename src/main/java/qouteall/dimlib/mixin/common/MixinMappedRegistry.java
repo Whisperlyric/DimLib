@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.objects.ObjectList;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -45,21 +46,18 @@ public abstract class MixinMappedRegistry<T> implements IMappedRegistry {
     
     @Shadow
     @Final
-    private ResourceKey<? extends Registry<T>> key;
+    ResourceKey<? extends Registry<T>> key;
     
     @Shadow
     @Final
     private Map<T, Holder.Reference<T>> byValue;
     
     @Shadow
-    @Final
-    private Map<T, Lifecycle> lifecycles;
-    
-    @Shadow
-    private @Nullable List<Holder.Reference<T>> holdersInOrder;
-    
-    @Shadow
     private boolean frozen;
+    
+    @Shadow
+    @Final
+    private Map<ResourceKey<T>, RegistrationInfo> registrationInfos;
     
     @Override
     public boolean dimlib_getIsFrozen() {
@@ -71,31 +69,36 @@ public abstract class MixinMappedRegistry<T> implements IMappedRegistry {
         frozen = cond;
     }
     
+    /**
+     * See {@link MappedRegistry#register(ResourceKey, Object, RegistrationInfo)}
+     */
     @Override
     public boolean dimlib_forceRemove(ResourceLocation id) {
+        LOGGER.debug("[DimLib] Trying to remove {} from {}", id, this.key);
+        
         Holder.Reference<T> holder = byLocation.remove(id);
         
         if (holder == null) {
+            LOGGER.debug("[DimLib] {} not found in {} when trying to remove", id, this.key);
             return false;
         }
         
+        ResourceKey<T> eleKey = holder.key();
         T value = holder.value();
         
         int intId = toId.getInt(value);
         
         if (intId == -1) {
-            LOGGER.error("[ImmPtl] missing integer id for {}", value);
+            LOGGER.error("[DimLib] missing integer id for {} {}", value, id);
         }
         else {
             toId.removeInt(value);
             byId.set(intId, null);
         }
         
-        byKey.remove(ResourceKey.create(key, id));
+        byKey.remove(eleKey);
         byValue.remove(value);
-        lifecycles.remove(value);
-        
-        holdersInOrder = null;
+        registrationInfos.remove(eleKey);
         
         return true;
     }

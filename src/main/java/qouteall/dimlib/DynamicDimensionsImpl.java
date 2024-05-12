@@ -6,6 +6,7 @@ import com.mojang.serialization.Lifecycle;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
@@ -23,7 +24,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.border.BorderChangeListener;
 import net.minecraft.world.level.border.WorldBorder;
-import net.minecraft.world.level.chunk.ChunkStatus;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
@@ -114,7 +115,8 @@ public class DynamicDimensionsImpl {
         ((IMappedRegistry) levelStemRegistry).dimlib_setIsFrozen(false);
         ((MappedRegistry<LevelStem>) levelStemRegistry).register(
             ResourceKey.create(Registries.LEVEL_STEM, dimensionId),
-            levelStem, Lifecycle.stable()
+            levelStem,
+            RegistrationInfo.BUILT_IN // use built-in registration info for now
         );
         ((IMappedRegistry) levelStemRegistry).dimlib_setIsFrozen(true);
         

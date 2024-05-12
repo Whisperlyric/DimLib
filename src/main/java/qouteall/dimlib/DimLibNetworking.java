@@ -4,14 +4,15 @@ import com.google.common.collect.ImmutableMap;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.FabricPacket;
-import net.fabricmc.fabric.api.networking.v1.PacketType;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -20,6 +21,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.level.dimension.DimensionType;
+import org.apache.commons.lang3.Validate;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qouteall.dimlib.api.DimensionAPI;
@@ -30,25 +33,20 @@ public class DimLibNetworking {
     
     public static record DimSyncPacket(
         CompoundTag dimIdToTypeIdTag
-    ) implements FabricPacket {
-        public static final PacketType<DimSyncPacket> TYPE = PacketType.create(
-            new ResourceLocation("dimlib", "dim_sync"),
-            DimSyncPacket::read
-        );
+    ) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<DimSyncPacket> TYPE =
+            CustomPacketPayload.createType("dimlib:dim_sync");
+        
+        public static final StreamCodec<FriendlyByteBuf, DimSyncPacket> CODEC =
+            StreamCodec.of((b, p) -> p.write(b), DimSyncPacket::read);
         
         public static DimSyncPacket read(FriendlyByteBuf buf) {
             CompoundTag compoundTag = buf.readNbt();
             return new DimSyncPacket(compoundTag);
         }
         
-        @Override
         public void write(FriendlyByteBuf buf) {
             buf.writeNbt(dimIdToTypeIdTag);
-        }
-        
-        @Override
-        public PacketType<?> getType() {
-            return TYPE;
         }
         
         public static DimSyncPacket createPacket(MinecraftServer server) {
@@ -102,7 +100,12 @@ public class DimLibNetworking {
         }
         
         @Environment(EnvType.CLIENT)
-        public void handleOnNetworkingThread(ClientGamePacketListener listener) {
+        public void handle(ClientGamePacketListener listener) {
+            Validate.isTrue(
+                Minecraft.getInstance().isSameThread(),
+                "Not running in client thread"
+            );
+            
             LOGGER.info(
                 "Client received dimension info\n{}",
                 String.join("\n", dimIdToTypeIdTag.getAllKeys())
@@ -112,23 +115,31 @@ public class DimLibNetworking {
             ClientDimensionInfo.accept(dimIdToDimType);
             ((IClientPacketListener) listener).ip_setLevels(dimIdToDimType.keySet());
             
-            Minecraft.getInstance().execute(() -> {
-                DimensionAPI.CLIENT_DIMENSION_UPDATE_EVENT.invoker().run(
-                    ClientDimensionInfo.getDimensionIds()
-                );
-            });
+            DimensionAPI.CLIENT_DIMENSION_UPDATE_EVENT.invoker().run(
+                ClientDimensionInfo.getDimensionIds()
+            );
+        }
+        
+        @Override
+        public @NotNull Type<? extends CustomPacketPayload> type() {
+            return TYPE;
         }
     }
     
+    public static void init() {
+        PayloadTypeRegistry.playS2C().register(
+            DimSyncPacket.TYPE, DimSyncPacket.CODEC
+        );
+    }
+    
+    @SuppressWarnings("resource")
     @Environment(EnvType.CLIENT)
     public static void initClient() {
         ClientPlayNetworking.registerGlobalReceiver(
-            DimSyncPacket.TYPE.getId(),
-            (client, handler, buf, responseSender) -> {
-                // directly handle in networking thread
-                // it does not touch world state, so it's safe
-                DimSyncPacket dimSyncPacket = DimSyncPacket.TYPE.read(buf);
-                dimSyncPacket.handleOnNetworkingThread(handler);
+            DimSyncPacket.TYPE,
+            (p, c) -> {
+                // it's now handled in client thread, not networking thread
+                p.handle(c.client().getConnection());
             }
         );
     }
