@@ -14,7 +14,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.RegistryOps;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -23,6 +25,9 @@ import net.minecraft.world.level.dimension.LevelStem;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import qouteall.dimlib.api.DimensionAPI;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class DimsCommand {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -99,6 +104,23 @@ public class DimsCommand {
                 })
             )
         );
+        
+        builder.then(Commands.literal("list")
+            .executes(context -> {
+                MinecraftServer server = context.getSource().getServer();
+                
+                MutableComponent text = Component.literal(
+                    server.levelKeys()
+                        .stream()
+                        .map(k -> k.location().toString())
+                        .sorted()
+                        .collect(Collectors.joining("\n"))
+                );
+                
+                context.getSource().sendSuccess(() -> text, false);
+                
+                return 0;
+            }));
         
         builder.then(Commands.literal("view_dim_config")
             .then(Commands.argument("dim", DimensionArgument.dimension())
