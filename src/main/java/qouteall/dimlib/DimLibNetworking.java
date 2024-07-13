@@ -35,7 +35,7 @@ public class DimLibNetworking {
         CompoundTag dimIdToTypeIdTag
     ) implements CustomPacketPayload {
         public static final CustomPacketPayload.Type<DimSyncPacket> TYPE =
-            CustomPacketPayload.createType("dimlib:dim_sync");
+            new Type<>(ResourceLocation.parse("dimlib:dim_sync"));
         
         public static final StreamCodec<FriendlyByteBuf, DimSyncPacket> CODEC =
             StreamCodec.of((b, p) -> p.write(b), DimSyncPacket::read);
@@ -86,12 +86,12 @@ public class DimLibNetworking {
             for (String key : tag.getAllKeys()) {
                 ResourceKey<Level> dimId = ResourceKey.create(
                     Registries.DIMENSION,
-                    new ResourceLocation(key)
+                    ResourceLocation.parse(key)
                 );
                 String dimTypeId = tag.getString(key);
                 ResourceKey<DimensionType> dimType = ResourceKey.create(
                     Registries.DIMENSION_TYPE,
-                    new ResourceLocation(dimTypeId)
+                    ResourceLocation.parse(dimTypeId)
                 );
                 builder.put(dimId, dimType);
             }
