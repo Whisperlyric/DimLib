@@ -27,7 +27,7 @@ Dynamically add a new dimension. That new dimension's dimension type and chunk g
 
 This command only clones the dimension type and world generator. It will not clone the things in world (blocks, entities, ...).
 
-Example: `/dims clone_dimension minecraft:overworld "aaa:bbb"` will dynamically add dimension `aaa:bbb` whiches world generation is the same as the overworld.
+Example: `/dims clone_dimension minecraft:overworld "aaa:bbb"` will dynamically add dimension `aaa:bbb` whose world generation is the same as the overworld.
 
 #### `/dims remove_dimension <dimension>`
 
