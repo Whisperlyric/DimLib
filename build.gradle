@@ -1,6 +1,9 @@
 plugins {
 	id 'fabric-loom' version '1.6-SNAPSHOT'
 	id 'maven-publish'
+
+	id "me.modmuss50.mod-publish-plugin" version "0.3.5"
+	// https://modmuss50.github.io/mod-publish-plugin/
 }
 
 version = project.mod_version + "+mc" + project.minecraft_version
@@ -87,5 +90,30 @@ publishing {
 		// Notice: This block does NOT have the same function as the block in the top level.
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
+	}
+}
+
+publishMods {
+	file = remapJar.archiveFile
+	changelog = file("changelog.md").text
+	type = ALPHA
+	modLoaders.add("fabric")
+
+	displayName = "v${project.mod_version}-mc${project.minecraft_version}"
+	version = "v${project.mod_version}-mc${project.minecraft_version}"
+
+	modrinth {
+		projectId = "WECKae1F"
+		accessToken = providers.environmentVariable("MODRINTH_TOKEN")
+		minecraftVersions.add(minecraft_version)
+
+		requires {
+			slug = "fabric-api"
+		}
+	}
+	github {
+		repository = "iPortalTeam/DimLib"
+		accessToken = providers.environmentVariable("GITHUB_TOKEN")
+		commitish = "${project.git_branch}"
 	}
 }
