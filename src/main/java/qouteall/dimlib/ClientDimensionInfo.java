@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionType;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.DimensionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -17,24 +17,24 @@ import java.util.Set;
 public class ClientDimensionInfo {
     private static final Logger LOGGER = LogManager.getLogger();
     
-    public static ImmutableSet<RegistryKey<World>> dimensionIds;
-    public static ImmutableMap<RegistryKey<World>, RegistryKey<DimensionType>> dimensionIdToType;
+    public static ImmutableSet<ResourceKey<Level>> dimensionIds;
+    public static ImmutableMap<ResourceKey<Level>, ResourceKey<DimensionType>> dimensionIdToType;
     
-    public static Set<RegistryKey<World>> getDimensionIds() {
+    public static Set<ResourceKey<Level>> getDimensionIds() {
         if (dimensionIds == null) {
             throw new IllegalStateException("The dimension info has not been synced yet");
         }
         return dimensionIds;
     }
     
-    public static Map<RegistryKey<World>, RegistryKey<DimensionType>> getDimensionIdToType() {
+    public static Map<ResourceKey<Level>, ResourceKey<DimensionType>> getDimensionIdToType() {
         if (dimensionIdToType == null) {
             throw new IllegalStateException("The dimension info has not been synced yet");
         }
         return dimensionIdToType;
     }
     
-    static void accept(ImmutableMap<RegistryKey<World>, RegistryKey<DimensionType>> m) {
+    static void accept(ImmutableMap<ResourceKey<Level>, ResourceKey<DimensionType>> m) {
         dimensionIdToType = m;
         dimensionIds = dimensionIdToType.keySet();
     }

@@ -1,36 +1,34 @@
 package qouteall.dimlib;
 
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.entry.RegistryEntryList;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionTypes;
-import net.minecraft.world.gen.chunk.FlatChunkGenerator;
-import net.minecraft.world.gen.chunk.FlatChunkGeneratorConfig;
-import net.minecraft.world.gen.chunk.FlatChunkGeneratorLayer;
-
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
+import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public record DimensionTemplate(
-    RegistryKey<DimensionType> dimensionTypeId,
+    ResourceKey<DimensionType> dimensionTypeId,
     DimensionFactory dimensionFactory
 ) {
     
     public static interface DimensionFactory {
-        DimensionOptions createLevelStem(
+        LevelStem createLevelStem(
             MinecraftServer server,
-            RegistryEntry<DimensionType> dimensionTypeHolder
+            Holder<DimensionType> dimensionTypeHolder
         );
     }
     
@@ -42,11 +40,11 @@ public record DimensionTemplate(
         DIMENSION_TEMPLATES.put(name, dimensionTemplate);
     }
     
-    public DimensionOptions createLevelStem(MinecraftServer server) {
-        DynamicRegistryManager registryManager = server.getRegistryManager();
-        Registry<DimensionType> dimensionTypes = registryManager.getOrThrow(RegistryKeys.DIMENSION_TYPE);
+    public LevelStem createLevelStem(MinecraftServer server) {
+        RegistryAccess registryManager = server.registryAccess();
+        Registry<DimensionType> dimensionTypes = registryManager.lookupOrThrow(Registries.DIMENSION_TYPE);
         
-        RegistryEntry.Reference<DimensionType> holder = dimensionTypes.getOrThrow(dimensionTypeId);
+        Holder.Reference<DimensionType> holder = dimensionTypes.getOrThrow(dimensionTypeId);
         
         return dimensionFactory.createLevelStem(
             server, holder
@@ -60,70 +58,70 @@ public record DimensionTemplate(
     }
     
     public static final DimensionTemplate FLAT_TEMPLATE = new DimensionTemplate(
-        DimensionTypes.OVERWORLD,
+        BuiltinDimensionTypes.OVERWORLD,
         (server, dimTypeHolder) -> {
-            DynamicRegistryManager registryManager = server.getRegistryManager();
-            Registry<Biome> biomeRegistry = registryManager.getOrThrow(RegistryKeys.BIOME);
+            RegistryAccess registryManager = server.registryAccess();
+            Registry<Biome> biomeRegistry = registryManager.lookupOrThrow(Registries.BIOME);
             
-            RegistryKey<Biome> plainsKey = RegistryKey.of(RegistryKeys.BIOME, Identifier.of("minecraft", "plains"));
-            RegistryEntry.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
+            ResourceKey<Biome> plainsKey = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath("minecraft", "plains"));
+            Holder.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
             
-            FlatChunkGeneratorConfig config = new FlatChunkGeneratorConfig(
+            FlatLevelGeneratorSettings config = new FlatLevelGeneratorSettings(
                 Optional.empty(),
                 plainsHolder,
                 List.of()
             );
-            config.getLayers().add(new FlatChunkGeneratorLayer(1, Blocks.BEDROCK));
-            config.getLayers().add(new FlatChunkGeneratorLayer(2, Blocks.DIRT));
-            config.getLayers().add(new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK));
+            config.getLayersInfo().add(new FlatLayerInfo(1, Blocks.BEDROCK));
+            config.getLayersInfo().add(new FlatLayerInfo(2, Blocks.DIRT));
+            config.getLayersInfo().add(new FlatLayerInfo(1, Blocks.GRASS_BLOCK));
             
-            return new DimensionOptions(dimTypeHolder, new FlatChunkGenerator(config));
+            return new LevelStem(dimTypeHolder, new FlatLevelSource(config));
         }
     );
     
     public static final DimensionTemplate STONE_TEMPLATE = new DimensionTemplate(
-        DimensionTypes.OVERWORLD,
+        BuiltinDimensionTypes.OVERWORLD,
         (server, dimTypeHolder) -> {
-            DynamicRegistryManager registryManager = server.getRegistryManager();
-            Registry<Biome> biomeRegistry = registryManager.getOrThrow(RegistryKeys.BIOME);
+            RegistryAccess registryManager = server.registryAccess();
+            Registry<Biome> biomeRegistry = registryManager.lookupOrThrow(Registries.BIOME);
             
-            RegistryKey<Biome> plainsKey = RegistryKey.of(RegistryKeys.BIOME, Identifier.of("minecraft", "plains"));
-            RegistryEntry.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
+            ResourceKey<Biome> plainsKey = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath("minecraft", "plains"));
+            Holder.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
             
-            FlatChunkGeneratorConfig config = new FlatChunkGeneratorConfig(
+            FlatLevelGeneratorSettings config = new FlatLevelGeneratorSettings(
                 Optional.empty(),
                 plainsHolder,
                 List.of()
             );
-            config.getLayers().add(new FlatChunkGeneratorLayer(1, Blocks.BEDROCK));
-            config.getLayers().add(new FlatChunkGeneratorLayer(60, Blocks.STONE));
-            config.getLayers().add(new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK));
+            config.getLayersInfo().add(new FlatLayerInfo(1, Blocks.BEDROCK));
+            config.getLayersInfo().add(new FlatLayerInfo(60, Blocks.STONE));
+            config.getLayersInfo().add(new FlatLayerInfo(1, Blocks.GRASS_BLOCK));
             
-            return new DimensionOptions(dimTypeHolder, new FlatChunkGenerator(config));
+            return new LevelStem(dimTypeHolder, new FlatLevelSource(config));
         }
     );
     
     public static final DimensionTemplate VOID_TEMPLATE = new DimensionTemplate(
-        DimensionTypes.OVERWORLD,
+        BuiltinDimensionTypes.OVERWORLD,
         (server, dimTypeHolder) -> {
-            DynamicRegistryManager registryManager = server.getRegistryManager();
+            RegistryAccess registryManager = server.registryAccess();
             
-            Registry<Biome> biomeRegistry = registryManager.getOrThrow(RegistryKeys.BIOME);
+            Registry<Biome> biomeRegistry = registryManager.lookupOrThrow(Registries.BIOME);
             
-            RegistryKey<Biome> plainsKey = RegistryKey.of(RegistryKeys.BIOME, Identifier.of("minecraft", "plains"));
-            RegistryEntry.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
+            ResourceKey<Biome> plainsKey = ResourceKey.create(Registries.BIOME, Identifier.fromNamespaceAndPath("minecraft", "plains"));
+            Holder.Reference<Biome> plainsHolder = biomeRegistry.getOrThrow(plainsKey);
             
-            FlatChunkGeneratorConfig flatChunkGeneratorConfig =
-                new FlatChunkGeneratorConfig(
+            FlatLevelGeneratorSettings flatChunkGeneratorConfig =
+                new FlatLevelGeneratorSettings(
                     Optional.empty(),
                     plainsHolder,
                     List.of()
                 );
-            flatChunkGeneratorConfig.getLayers().add(new FlatChunkGeneratorLayer(1, Blocks.AIR));
+            flatChunkGeneratorConfig.getLayersInfo().add(new FlatLayerInfo(1, Blocks.AIR));
             
-            FlatChunkGenerator chunkGenerator = new FlatChunkGenerator(flatChunkGeneratorConfig);
+            FlatLevelSource chunkGenerator = new FlatLevelSource(flatChunkGeneratorConfig);
             
-            return new DimensionOptions(dimTypeHolder, chunkGenerator);
+            return new LevelStem(dimTypeHolder, chunkGenerator);
         }
     );
 }

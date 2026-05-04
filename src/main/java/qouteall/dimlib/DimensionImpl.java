@@ -1,16 +1,16 @@
 package qouteall.dimlib;
 
 import com.mojang.serialization.Lifecycle;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.SimpleRegistry;
-import net.minecraft.registry.entry.RegistryEntryInfo;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.SaveProperties;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.gen.GeneratorOptions;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.storage.WorldData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qouteall.dimlib.ducks.IMappedRegistry;
@@ -25,25 +25,25 @@ public class DimensionImpl {
     public static boolean suppressExperimentalWarning = false;
     
     public static void directlyRegisterLevelStem(
-        MinecraftServer server, Identifier dimensionId, DimensionOptions dimensionOptions
+        MinecraftServer server, Identifier dimensionId, LevelStem dimensionOptions
     ) {
-        DynamicRegistryManager registryManager = server.getRegistryManager();
+        RegistryAccess registryManager = server.registryAccess();
         
-        SaveProperties worldData = server.getSaveProperties();
-        GeneratorOptions worldOptions = worldData.getGeneratorOptions();
+        WorldData worldData = server.getWorldData();
+        WorldOptions worldOptions = worldData.worldGenOptions();
         
-        SimpleRegistry<DimensionOptions> levelStems = (SimpleRegistry<DimensionOptions>)
-            registryManager.getOrThrow(RegistryKeys.DIMENSION);
+        MappedRegistry<LevelStem> levelStems = (MappedRegistry<LevelStem>)
+            registryManager.lookupOrThrow(Registries.LEVEL_STEM);
         
-        if (!levelStems.containsId(dimensionId)) {
+        if (!levelStems.containsKey(dimensionId)) {
             boolean oldIsFrozen = ((IMappedRegistry) levelStems).dimlib_getIsFrozen();
             ((IMappedRegistry) levelStems).dimlib_setIsFrozen(false);
             
             try {
-                levelStems.add(
-                    RegistryKey.of(RegistryKeys.DIMENSION, dimensionId),
+                levelStems.register(
+                    ResourceKey.create(Registries.LEVEL_STEM, dimensionId),
                     dimensionOptions,
-                    RegistryEntryInfo.DEFAULT
+                    RegistrationInfo.BUILT_IN
                 );
             }
             finally {
@@ -59,9 +59,9 @@ public class DimensionImpl {
         }
     }
     
-    public static SimpleRegistry<DimensionOptions> getDimensionRegistry(MinecraftServer server) {
-        return ((SimpleRegistry<DimensionOptions>)
-            server.getRegistryManager().getOrThrow(RegistryKeys.DIMENSION)
+    public static MappedRegistry<LevelStem> getDimensionRegistry(MinecraftServer server) {
+        return ((MappedRegistry<LevelStem>)
+            server.registryAccess().lookupOrThrow(Registries.LEVEL_STEM)
         );
     }
 }

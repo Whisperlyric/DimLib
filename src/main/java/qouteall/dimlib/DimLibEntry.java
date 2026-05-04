@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qouteall.dimlib.config.DimLibConfig;
+import qouteall.dimlib.config.PresetConfig;
 import qouteall.dimlib.ducks.IMinecraftServer;
 
 public class DimLibEntry implements ModInitializer {
@@ -34,5 +35,7 @@ public class DimLibEntry implements ModInitializer {
 		MidnightConfig.init(
 			MODID, DimLibConfig.class
 		);
+		
+		PresetConfig.init();
 	}
 }

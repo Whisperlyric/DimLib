@@ -5,24 +5,24 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.registry.DynamicRegistryManager;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.level.dimension.DimensionType;
 import org.apache.commons.lang3.Validate;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -33,43 +33,43 @@ public class DimLibNetworking {
     public static final Logger LOGGER = LoggerFactory.getLogger(DimLibNetworking.class);
     
     public static record DimSyncPacket(
-        NbtCompound dimIdToTypeIdTag
-    ) implements CustomPayload {
-        public static final CustomPayload.Id<DimSyncPacket> TYPE =
-            new Id<>(Identifier.of("dimlib", "dim_sync"));
+        CompoundTag dimIdToTypeIdTag
+    ) implements CustomPacketPayload {
+        public static final CustomPacketPayload.Type<DimSyncPacket> TYPE =
+            new Type<>(Identifier.fromNamespaceAndPath("dimlib", "dim_sync"));
         
-        public static final PacketCodec<RegistryByteBuf, DimSyncPacket> CODEC =
-            PacketCodec.of(DimSyncPacket::write, DimSyncPacket::new);
+        public static final StreamCodec<RegistryFriendlyByteBuf, DimSyncPacket> CODEC =
+            StreamCodec.ofMember(DimSyncPacket::write, DimSyncPacket::new);
         
-        public DimSyncPacket(RegistryByteBuf buf) {
+        public DimSyncPacket(RegistryFriendlyByteBuf buf) {
             this(buf.readNbt());
         }
         
-        public void write(RegistryByteBuf buf) {
+        public void write(RegistryFriendlyByteBuf buf) {
             buf.writeNbt(dimIdToTypeIdTag);
         }
         
         public static DimSyncPacket createPacket(MinecraftServer server) {
-            DynamicRegistryManager registryManager = server.getRegistryManager();
-            Registry<DimensionType> dimensionTypes = registryManager.getOrThrow(RegistryKeys.DIMENSION_TYPE);
+            RegistryAccess registryManager = server.registryAccess();
+            Registry<DimensionType> dimensionTypes = registryManager.lookupOrThrow(Registries.DIMENSION_TYPE);
             
-            NbtCompound dimIdToDimTypeId = new NbtCompound();
-            for (ServerWorld world : server.getWorlds()) {
-                RegistryKey<World> dimId = world.getRegistryKey();
+            CompoundTag dimIdToDimTypeId = new CompoundTag();
+            for (ServerLevel world : server.getAllLevels()) {
+                ResourceKey<Level> dimId = world.dimension();
                 
-                RegistryEntry<DimensionType> dimTypeEntry = world.getDimensionEntry();
-                Identifier dimTypeId = dimensionTypes.getId(dimTypeEntry.value());
+                Holder<DimensionType> dimTypeEntry = world.dimensionTypeRegistration();
+                Identifier dimTypeId = dimensionTypes.getKey(dimTypeEntry.value());
                 
                 if (dimTypeId == null) {
-                    LOGGER.error("Cannot find dimension type for {}", dimId.getValue());
+                    LOGGER.error("Cannot find dimension type for {}", dimId.identifier());
                     LOGGER.error(
-                        "Registered dimension types {}", dimensionTypes.getIds()
+                        "Registered dimension types {}", dimensionTypes.keySet()
                     );
-                    dimTypeId = DimensionTypes.OVERWORLD.getValue();
+                    dimTypeId = BuiltinDimensionTypes.OVERWORLD.identifier();
                 }
                 
                 dimIdToDimTypeId.putString(
-                    dimId.getValue().toString(),
+                    dimId.identifier().toString(),
                     dimTypeId.toString()
                 );
             }
@@ -77,21 +77,21 @@ public class DimLibNetworking {
             return new DimSyncPacket(dimIdToDimTypeId);
         }
         
-        public ImmutableMap<RegistryKey<World>, RegistryKey<DimensionType>> toMap() {
-            NbtCompound tag = dimIdToTypeIdTag();
+        public ImmutableMap<ResourceKey<Level>, ResourceKey<DimensionType>> toMap() {
+            CompoundTag tag = dimIdToTypeIdTag();
             
-            ImmutableMap.Builder<RegistryKey<World>, RegistryKey<DimensionType>> builder =
+            ImmutableMap.Builder<ResourceKey<Level>, ResourceKey<DimensionType>> builder =
                 new ImmutableMap.Builder<>();
             
-            for (String key : tag.getKeys()) {
-                RegistryKey<World> dimId = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(key)
+            for (String key : tag.keySet()) {
+                ResourceKey<Level> dimId = ResourceKey.create(
+                    Registries.DIMENSION,
+                    Identifier.parse(key)
                 );
                 String dimTypeId = tag.getString(key).orElse("");
-                RegistryKey<DimensionType> dimType = RegistryKey.of(
-                    RegistryKeys.DIMENSION_TYPE,
-                    Identifier.of(dimTypeId)
+                ResourceKey<DimensionType> dimType = ResourceKey.create(
+                    Registries.DIMENSION_TYPE,
+                    Identifier.parse(dimTypeId)
                 );
                 builder.put(dimId, dimType);
             }
@@ -100,15 +100,15 @@ public class DimLibNetworking {
         }
         
         @Environment(EnvType.CLIENT)
-        public void handle(ClientPlayPacketListener listener) {
+        public void handle(ClientGamePacketListener listener) {
             Validate.isTrue(
-                MinecraftClient.getInstance().isOnThread(),
+                Minecraft.getInstance().isSameThread(),
                 "Not running in client thread"
             );
             
             LOGGER.info(
                 "Client received dimension info\n{}",
-                String.join("\n", dimIdToTypeIdTag.getKeys())
+                String.join("\n", dimIdToTypeIdTag.keySet())
             );
             
             var dimIdToDimType = this.toMap();
@@ -122,7 +122,7 @@ public class DimLibNetworking {
         }
         
         @Override
-        public @NotNull Id<? extends CustomPayload> getId() {
+        public @NotNull Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
     }
@@ -140,8 +140,8 @@ public class DimLibNetworking {
             DimSyncPacket.TYPE,
             (p, c) -> {
                 // it's now handled in client thread, not networking thread
-                MinecraftClient client = c.client();
-                ClientPlayNetworkHandler networkHandler = client.getNetworkHandler();
+                Minecraft client = c.client();
+                ClientPacketListener networkHandler = client.getConnection();
                 if (networkHandler != null) {
                     p.handle(networkHandler);
                 }

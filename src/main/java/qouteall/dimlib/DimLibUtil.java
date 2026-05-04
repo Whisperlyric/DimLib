@@ -10,12 +10,11 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
-
 import java.lang.reflect.Type;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 
 public class DimLibUtil {
     
@@ -34,7 +33,7 @@ public class DimLibUtil {
         gsonBuilder.setPrettyPrinting();
         
         gsonBuilder.registerTypeAdapter(
-            new TypeToken<RegistryKey<World>>() {}.getType(),
+            new TypeToken<ResourceKey<Level>>() {}.getType(),
             new DimensionIDJsonAdapter()
         );
         
@@ -42,21 +41,21 @@ public class DimLibUtil {
     }
     
     private static class DimensionIDJsonAdapter
-        implements JsonSerializer<RegistryKey<World>>, JsonDeserializer<RegistryKey<World>> {
+        implements JsonSerializer<ResourceKey<Level>>, JsonDeserializer<ResourceKey<Level>> {
         
         @Override
-        public RegistryKey<World> deserialize(
+        public ResourceKey<Level> deserialize(
             JsonElement json, Type typeOfT, JsonDeserializationContext context
         ) throws JsonParseException {
             String str = json.getAsString();
-            return RegistryKey.of(
-                RegistryKeys.WORLD, Identifier.of(str)
+            return ResourceKey.create(
+                Registries.DIMENSION, Identifier.parse(str)
             );
         }
         
         @Override
-        public JsonElement serialize(RegistryKey<World> src, Type typeOfSrc, JsonSerializationContext context) {
-            return new JsonPrimitive(src.getValue().toString());
+        public JsonElement serialize(ResourceKey<Level> src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.identifier().toString());
         }
     }
 }

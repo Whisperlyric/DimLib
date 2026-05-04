@@ -4,14 +4,13 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.event.Event;
 import net.fabricmc.fabric.api.event.EventFactory;
-import net.minecraft.registry.RegistryWrapper;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionOptions;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,7 +49,7 @@ public class DimensionAPI {
     public static void addDimension(
         MinecraftServer server,
         Identifier dimensionId,
-        DimensionOptions dimensionOptions
+        LevelStem dimensionOptions
     ) {
         if (((IMinecraftServer) server).dimlib_getIsFinishedCreatingWorlds()) {
             addDimensionDynamically(server, dimensionId, dimensionOptions);
@@ -70,13 +69,13 @@ public class DimensionAPI {
     public static boolean dimensionExistsInRegistry(
         MinecraftServer server, Identifier dimensionId
     ) {
-        return DimensionImpl.getDimensionRegistry(server).containsId(dimensionId);
+        return DimensionImpl.getDimensionRegistry(server).containsKey(dimensionId);
     }
     
     public static void addDimensionIfNotExists(
         MinecraftServer server,
         Identifier dimensionId,
-        Supplier<DimensionOptions> dimensionOptions
+        Supplier<LevelStem> dimensionOptions
     ) {
         if (dimensionExistsInRegistry(server, dimensionId)) {
             return;
@@ -88,13 +87,13 @@ public class DimensionAPI {
     public static void addDimensionDynamically(
         MinecraftServer server,
         Identifier dimensionId,
-        DimensionOptions dimensionOptions
+        LevelStem dimensionOptions
     ) {
         Validate.isTrue(server.isRunning(), "The server is not running");
         DynamicDimensionsImpl.addDimensionDynamically(server, dimensionId, dimensionOptions);
     }
     
-    public static void removeDimensionDynamically(ServerWorld world) {
+    public static void removeDimensionDynamically(ServerLevel world) {
         if (!world.getServer().isRunning()) {
             LOGGER.error(
                 "Cannot remove dimension at this time {}", world, new Throwable()
@@ -106,11 +105,11 @@ public class DimensionAPI {
     }
     
     public static interface ServerDynamicUpdateListener {
-        void run(MinecraftServer server, Set<RegistryKey<World>> dimensions);
+        void run(MinecraftServer server, Set<ResourceKey<Level>> dimensions);
     }
     
     public static interface ClientDynamicUpdateListener {
-        void run(Set<RegistryKey<World>> dimensions);
+        void run(Set<ResourceKey<Level>> dimensions);
     }
     
     public static final Event<ServerDynamicUpdateListener> SERVER_DIMENSION_DYNAMIC_UPDATE_EVENT =
@@ -143,8 +142,8 @@ public class DimensionAPI {
             }
         );
     
-    public static boolean isDimensionAlive(ServerWorld world) {
-        return world.getServer().getWorld(world.getRegistryKey()) == world;
+    public static boolean isDimensionAlive(ServerLevel world) {
+        return world.getServer().getLevel(world.dimension()) == world;
     }
     
     public static void suppressExperimentalWarning() {
@@ -156,12 +155,12 @@ public class DimensionAPI {
     }
     
     @Environment(EnvType.CLIENT)
-    public static Set<RegistryKey<World>> getClientDimensionIds() {
+    public static Set<ResourceKey<Level>> getClientDimensionIds() {
         return ClientDimensionInfo.getDimensionIds();
     }
     
     @Environment(EnvType.CLIENT)
-    public static Map<RegistryKey<World>, RegistryKey<DimensionType>> getClientDimensionIdToTypeMap() {
+    public static Map<ResourceKey<Level>, ResourceKey<DimensionType>> getClientDimensionIdToTypeMap() {
         return ClientDimensionInfo.getDimensionIdToType();
     }
     
@@ -172,7 +171,7 @@ public class DimensionAPI {
     }
     
     public static interface PreRemoveDimensionCallback {
-        void accept(ServerWorld world);
+        void accept(ServerLevel world);
     }
     
     public static final Event<PreRemoveDimensionCallback> SERVER_PRE_REMOVE_DIMENSION_EVENT =

@@ -3,12 +3,6 @@ package qouteall.dimlib.mixin.common;
 import com.mojang.serialization.Lifecycle;
 import it.unimi.dsi.fastutil.objects.ObjectList;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.SimpleRegistry;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.entry.RegistryEntryInfo;
-import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,44 +13,50 @@ import qouteall.dimlib.ducks.IMappedRegistry;
 
 import java.util.List;
 import java.util.Map;
+import net.minecraft.core.Holder;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 
-@Mixin(SimpleRegistry.class)
+@Mixin(MappedRegistry.class)
 public abstract class MixinMappedRegistry<T> implements IMappedRegistry {
     private static final Logger LOGGER = LoggerFactory.getLogger("DimLib");
     
     @Shadow
     @Final
-    private Map<Identifier, RegistryEntry.Reference<T>> idToEntry;
+    private Map<Identifier, Holder.Reference<T>> byLocation;
     
     @Shadow
-    public abstract @Nullable T get(int id);
-    
-    @Shadow
-    @Final
-    private ObjectList<RegistryEntry.Reference<T>> rawIdToEntry;
+    public abstract @Nullable T byId(int id);
     
     @Shadow
     @Final
-    private Reference2IntMap<T> entryToRawId;
+    private ObjectList<Holder.Reference<T>> byId;
     
     @Shadow
     @Final
-    private Map<RegistryKey<T>, RegistryEntry.Reference<T>> keyToEntry;
+    private Reference2IntMap<T> toId;
     
     @Shadow
     @Final
-    RegistryKey<? extends Registry<T>> key;
+    private Map<ResourceKey<T>, Holder.Reference<T>> byKey;
     
     @Shadow
     @Final
-    private Map<T, RegistryEntry.Reference<T>> valueToEntry;
+    ResourceKey<? extends Registry<T>> key;
+    
+    @Shadow
+    @Final
+    private Map<T, Holder.Reference<T>> byValue;
     
     @Shadow
     private boolean frozen;
     
     @Shadow
     @Final
-    private Map<RegistryKey<T>, RegistryEntryInfo> keyToEntryInfo;
+    private Map<ResourceKey<T>, RegistrationInfo> registrationInfos;
     
     @Override
     public boolean dimlib_getIsFrozen() {
@@ -72,36 +72,36 @@ public abstract class MixinMappedRegistry<T> implements IMappedRegistry {
     public boolean dimlib_forceRemove(Identifier id) {
         LOGGER.debug("[DimLib] Trying to remove {} from {}", id, this.key);
         
-        RegistryEntry.Reference<T> holder = idToEntry.remove(id);
+        Holder.Reference<T> holder = byLocation.remove(id);
         
         if (holder == null) {
             LOGGER.debug("[DimLib] {} not found in {} when trying to remove", id, this.key);
             return false;
         }
         
-        RegistryKey<T> eleKey = holder.registryKey();
+        ResourceKey<T> eleKey = holder.key();
         T value = holder.value();
         
-        int removedId = entryToRawId.getInt(value);
+        int removedId = toId.getInt(value);
         
         if (removedId != -1) {
-            entryToRawId.removeInt(value);
+            toId.removeInt(value);
             
-            int lastId = rawIdToEntry.size() - 1;
+            int lastId = byId.size() - 1;
             if (removedId < lastId) {
-                RegistryEntry.Reference<T> lastEntry = rawIdToEntry.get(lastId);
+                Holder.Reference<T> lastEntry = byId.get(lastId);
                 if (lastEntry != null) {
                     T lastValue = lastEntry.value();
-                    entryToRawId.put(lastValue, removedId);
-                    rawIdToEntry.set(removedId, lastEntry);
+                    toId.put(lastValue, removedId);
+                    byId.set(removedId, lastEntry);
                 }
             }
-            rawIdToEntry.remove(lastId);
+            byId.remove(lastId);
         }
         
-        keyToEntry.remove(eleKey);
-        valueToEntry.remove(value);
-        keyToEntryInfo.remove(eleKey);
+        byKey.remove(eleKey);
+        byValue.remove(value);
+        registrationInfos.remove(eleKey);
         
         return true;
     }

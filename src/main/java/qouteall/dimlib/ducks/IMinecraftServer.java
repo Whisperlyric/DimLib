@@ -1,21 +1,20 @@
 package qouteall.dimlib.ducks;
 
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
-import net.minecraft.world.level.storage.LevelStorage;
-
 import java.util.concurrent.Executor;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelStorageSource;
 
 public interface IMinecraftServer {
     
-    LevelStorage.Session dimlib_getStorageSource();
+    LevelStorageSource.LevelStorageAccess dimlib_getStorageSource();
     
     Executor dimlib_getExecutor();
     
-    void dimlib_addDimensionToWorldMap(RegistryKey<World> dim, ServerWorld world);
+    void dimlib_addDimensionToWorldMap(ResourceKey<Level> dim, ServerLevel world);
     
-    void dimlib_removeDimensionFromWorldMap(RegistryKey<World> dimension);
+    void dimlib_removeDimensionFromWorldMap(ResourceKey<Level> dimension);
     
     void dimlib_waitUntilNextTick();
     

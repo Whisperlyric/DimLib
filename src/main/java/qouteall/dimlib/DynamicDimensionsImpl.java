@@ -4,27 +4,24 @@ import com.google.common.collect.ImmutableList;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.Lifecycle;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.registry.SimpleRegistry;
-import net.minecraft.registry.entry.RegistryEntryInfo;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.SaveProperties;
-import net.minecraft.world.World;
-import net.minecraft.world.biome.source.BiomeAccess;
-import net.minecraft.world.border.WorldBorder;
-import net.minecraft.world.border.WorldBorderListener;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.gen.GeneratorOptions;
-import net.minecraft.world.level.ServerWorldProperties;
-import net.minecraft.world.level.storage.LevelStorage;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.border.BorderChangeListener;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.storage.ServerLevelData;
+import net.minecraft.world.level.storage.WorldData;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,33 +46,33 @@ public class DynamicDimensionsImpl {
     public static void addDimensionDynamically(
         MinecraftServer server,
         Identifier dimensionId,
-        DimensionOptions dimensionOptions
+        LevelStem dimensionOptions
     ) {
-        RegistryKey<World> dimensionResourceKey = RegistryKey.of(
-            RegistryKeys.WORLD, dimensionId
+        ResourceKey<Level> dimensionResourceKey = ResourceKey.create(
+            Registries.DIMENSION, dimensionId
         );
         
-        Validate.isTrue(server.isOnThread(), "this should be called in server main thread");
+        Validate.isTrue(server.isSameThread(), "this should be called in server main thread");
         Validate.isTrue(server.isRunning(), "Server is not running");
         
-        if (server.getWorld(dimensionResourceKey) != null) {
+        if (server.getLevel(dimensionResourceKey) != null) {
             throw new RuntimeException("Dimension " + dimensionId + " already exists.");
         }
         
-        ServerWorld overworld = server.getWorld(World.OVERWORLD);
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
         Validate.notNull(overworld, "Overworld is null");
         WorldBorder worldBorder = overworld.getWorldBorder();
         Validate.notNull(worldBorder, "Overworld world border is null");
         
-        SaveProperties worldData = server.getSaveProperties();
-        ServerWorldProperties serverLevelData = worldData.getMainWorldProperties();
+        WorldData worldData = server.getWorldData();
+        ServerLevelData serverLevelData = worldData.overworldData();
         
-        long seed = worldData.getGeneratorOptions().getSeed();
-        long obfuscatedSeed = BiomeAccess.hashSeed(seed);
+        long seed = worldData.worldGenOptions().seed();
+        long obfuscatedSeed = BiomeManager.obfuscateSeed(seed);
         
-        ServerWorldProperties derivedLevelData = worldData.getMainWorldProperties();
+        ServerLevelData derivedLevelData = worldData.overworldData();
         
-        ServerWorld newWorld = new ServerWorld(
+        ServerLevel newWorld = new ServerLevel(
             server,
             ((IMinecraftServer) server).dimlib_getExecutor(),
             ((IMinecraftServer) server).dimlib_getStorageSource(),
@@ -93,12 +90,12 @@ public class DynamicDimensionsImpl {
         
         ((IMinecraftServer) server).dimlib_addDimensionToWorldMap(dimensionResourceKey, newWorld);
         
-        Registry<DimensionOptions> levelStemRegistry = server.getRegistryManager().getOrThrow(RegistryKeys.DIMENSION);
+        Registry<LevelStem> levelStemRegistry = server.registryAccess().lookupOrThrow(Registries.LEVEL_STEM);
         ((IMappedRegistry) levelStemRegistry).dimlib_setIsFrozen(false);
-        ((SimpleRegistry<DimensionOptions>) levelStemRegistry).add(
-            RegistryKey.of(RegistryKeys.DIMENSION, dimensionId),
+        ((MappedRegistry<LevelStem>) levelStemRegistry).register(
+            ResourceKey.create(Registries.LEVEL_STEM, dimensionId),
             dimensionOptions,
-            RegistryEntryInfo.DEFAULT
+            RegistrationInfo.BUILT_IN
         );
         ((IMappedRegistry) levelStemRegistry).dimlib_setIsFrozen(true);
         
@@ -107,27 +104,27 @@ public class DynamicDimensionsImpl {
         var dimSyncPacket = ServerPlayNetworking.createS2CPacket(
             DimLibNetworking.DimSyncPacket.createPacket(server)
         );
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            player.networkHandler.sendPacket(dimSyncPacket);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.connection.send(dimSyncPacket);
         }
         
-        DimensionAPI.SERVER_DIMENSION_DYNAMIC_UPDATE_EVENT.invoker().run(server, server.getWorldRegistryKeys());
+        DimensionAPI.SERVER_DIMENSION_DYNAMIC_UPDATE_EVENT.invoker().run(server, server.levelKeys());
     }
     
-    public static void removeDimensionDynamically(ServerWorld world) {
+    public static void removeDimensionDynamically(ServerLevel world) {
         MinecraftServer server = world.getServer();
         
-        Validate.isTrue(server.isOnThread());
+        Validate.isTrue(server.isSameThread());
         
-        RegistryKey<World> dimension = world.getRegistryKey();
+        ResourceKey<Level> dimension = world.dimension();
         
-        if (dimension == World.OVERWORLD || dimension == World.NETHER || dimension == World.END) {
+        if (dimension == Level.OVERWORLD || dimension == Level.NETHER || dimension == Level.END) {
             throw new RuntimeException("Cannot remove vanilla dimension");
         }
         
         Validate.isTrue(server.isRunning(), "Server is not running");
         
-        LOGGER.info("Started Removing Dimension {}", dimension.getValue());
+        LOGGER.info("Started Removing Dimension {}", dimension.identifier());
         
         ((IMinecraftServer) server).dimlib_addTask(() -> {
             DimensionAPI.SERVER_PRE_REMOVE_DIMENSION_EVENT.invoker().accept(world);
@@ -142,8 +139,8 @@ public class DynamicDimensionsImpl {
             ((IMinecraftServer) server).dimlib_removeDimensionFromWorldMap(dimension);
             
             try {
-                while (world.getChunkManager().getPendingTasks() > 0) {
-                    world.getChunkManager().tick(() -> true, false);
+                while (world.getChunkSource().getPendingTasksCount() > 0) {
+                    world.getChunkSource().tick(() -> true, false);
                     
                     if (System.nanoTime() - lastLogTime > DimLibUtil.secondToNano(1)) {
                         lastLogTime = System.nanoTime();
@@ -169,10 +166,10 @@ public class DynamicDimensionsImpl {
             
             LOGGER.info(
                 "Has entities: {}",
-                world.iterateEntities().iterator().hasNext()
+                world.getAllEntities().iterator().hasNext()
             );
             
-            server.saveAll(false, true, false);
+            server.saveEverything(false, true, false);
             
             try {
                 world.close();
@@ -183,99 +180,99 @@ public class DynamicDimensionsImpl {
             
             resetWorldBorderListener(server);
             
-            Registry<DimensionOptions> levelStemRegistry = server.getRegistryManager()
-                .getOrThrow(RegistryKeys.DIMENSION);
-            ((IMappedRegistry) levelStemRegistry).dimlib_forceRemove(dimension.getValue());
+            Registry<LevelStem> levelStemRegistry = server.registryAccess()
+                .lookupOrThrow(Registries.LEVEL_STEM);
+            ((IMappedRegistry) levelStemRegistry).dimlib_forceRemove(dimension.identifier());
             
-            LOGGER.info("Removed Dimension {}", dimension.getValue());
+            LOGGER.info("Removed Dimension {}", dimension.identifier());
             
             var dimSyncPacket = ServerPlayNetworking.createS2CPacket(
                 DimLibNetworking.DimSyncPacket.createPacket(server)
             );
-            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                player.networkHandler.sendPacket(dimSyncPacket);
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                player.connection.send(dimSyncPacket);
             }
             
-            DimensionAPI.SERVER_DIMENSION_DYNAMIC_UPDATE_EVENT.invoker().run(server, server.getWorldRegistryKeys());
+            DimensionAPI.SERVER_DIMENSION_DYNAMIC_UPDATE_EVENT.invoker().run(server, server.levelKeys());
         });
     }
     
     private static void resetWorldBorderListener(MinecraftServer server) {
-        ServerWorld overworld = server.getWorld(World.OVERWORLD);
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
         Validate.notNull(overworld, "Overworld is null");
         
         WorldBorder worldBorder = overworld.getWorldBorder();
-        List<WorldBorderListener> borderChangeListeners =
+        List<BorderChangeListener> borderChangeListeners =
             ((IEWorldBorder) worldBorder).ip_getListeners();
         borderChangeListeners.clear();
-        for (ServerWorld serverWorld : server.getWorlds()) {
+        for (ServerLevel serverWorld : server.getAllLevels()) {
             if (serverWorld != overworld) {
                 worldBorder.addListener(createDelegateBorderChangeListener(serverWorld.getWorldBorder()));
             }
         }
     }
     
-    private static void evacuatePlayersFromDimension(ServerWorld world) {
+    private static void evacuatePlayersFromDimension(ServerLevel world) {
         MinecraftServer server = world.getServer();
-        ServerWorld overworld = server.getWorld(World.OVERWORLD);
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
         Validate.notNull(overworld, "Overworld is null");
         
-        List<ServerPlayerEntity> players = world.getPlayers(p -> true);
+        List<ServerPlayer> players = world.getPlayers(p -> true);
         
-        BlockPos spawnPos = overworld.getLevelProperties().getSpawnPoint().getPos();
+        BlockPos spawnPos = overworld.getLevelData().getRespawnData().pos();
         
-        for (ServerPlayerEntity player : players) {
-            player.teleport(
+        for (ServerPlayer player : players) {
+            player.teleportTo(
                 overworld,
                 spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5,
                 Set.of(),
                 0, 0,
                 false
             );
-            player.sendMessage(
-                Text.literal(
+            player.displayClientMessage(
+                Component.literal(
                     "Teleported to spawn pos because dimension %s had been removed"
-                        .formatted(world.getRegistryKey().getValue())
+                        .formatted(world.dimension().identifier())
                 ),
                 false
             );
         }
     }
     
-    private static WorldBorderListener createDelegateBorderChangeListener(WorldBorder border) {
-        return new WorldBorderListener() {
+    private static BorderChangeListener createDelegateBorderChangeListener(WorldBorder border) {
+        return new BorderChangeListener() {
             @Override
-            public void onSizeChange(WorldBorder worldBorder, double size) {
+            public void onSetSize(WorldBorder worldBorder, double size) {
                 border.setSize(size);
             }
             
             @Override
-            public void onInterpolateSize(WorldBorder worldBorder, double fromSize, double toSize, long time, long timeStart) {
-                border.interpolateSize(fromSize, toSize, time, timeStart);
+            public void onLerpSize(WorldBorder worldBorder, double fromSize, double toSize, long time, long timeStart) {
+                border.lerpSizeBetween(fromSize, toSize, time, timeStart);
             }
             
             @Override
-            public void onCenterChanged(WorldBorder worldBorder, double x, double z) {
+            public void onSetCenter(WorldBorder worldBorder, double x, double z) {
                 border.setCenter(x, z);
             }
             
             @Override
-            public void onWarningTimeChanged(WorldBorder worldBorder, int warningTime) {
+            public void onSetWarningTime(WorldBorder worldBorder, int warningTime) {
                 border.setWarningTime(warningTime);
             }
             
             @Override
-            public void onWarningBlocksChanged(WorldBorder worldBorder, int warningBlocks) {
+            public void onSetWarningBlocks(WorldBorder worldBorder, int warningBlocks) {
                 border.setWarningBlocks(warningBlocks);
             }
             
             @Override
-            public void onDamagePerBlockChanged(WorldBorder worldBorder, double damagePerBlock) {
+            public void onSetDamagePerBlock(WorldBorder worldBorder, double damagePerBlock) {
                 border.setDamagePerBlock(damagePerBlock);
             }
             
             @Override
-            public void onSafeZoneChanged(WorldBorder worldBorder, double safeZoneRadius) {
+            public void onSetSafeZone(WorldBorder worldBorder, double safeZoneRadius) {
                 border.setSafeZone(safeZoneRadius);
             }
         };

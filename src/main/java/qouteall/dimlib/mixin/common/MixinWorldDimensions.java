@@ -1,9 +1,9 @@
 package qouteall.dimlib.mixin.common;
 
 import com.mojang.serialization.Lifecycle;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.dimension.DimensionOptionsRegistryHolder;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.WorldDimensions;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -11,16 +11,16 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import qouteall.dimlib.DimensionImpl;
 
-@Mixin(DimensionOptionsRegistryHolder.class)
+@Mixin(WorldDimensions.class)
 public class MixinWorldDimensions {
     // hack lifecycle
     @Inject(
-        method = "isVanilla", at = @At("RETURN"), cancellable = true
+        method = "isVanillaLike", at = @At("RETURN"), cancellable = true
     )
     private static void onIsVanilla(
-        RegistryKey<DimensionOptions> registryKey, DimensionOptions dimensionOptions, CallbackInfoReturnable<Boolean> cir
+        ResourceKey<LevelStem> registryKey, LevelStem dimensionOptions, CallbackInfoReturnable<Boolean> cir
     ) {
-        String namespace = registryKey.getValue().getNamespace();
+        String namespace = registryKey.identifier().getNamespace();
         if (DimensionImpl.STABLE_NAMESPACES.contains(namespace)) {
             cir.setReturnValue(true);
         }
@@ -28,7 +28,7 @@ public class MixinWorldDimensions {
     
     // hack lifecycle
     @Redirect(
-        method = "getLifecycle",
+        method = "checkStability",
         at = @At(
             value = "INVOKE",
             target = "Lcom/mojang/serialization/Lifecycle;experimental()Lcom/mojang/serialization/Lifecycle;",

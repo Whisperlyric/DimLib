@@ -6,12 +6,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.block.Block;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.level.block.Block;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qouteall.dimlib.DimensionTemplate;
@@ -30,12 +30,16 @@ public class PresetConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String CONFIG_FILE_NAME = "dimlib_presets.json";
     
-    public static void loadAndRegister(MinecraftServer server) {
+    public static void init() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(CONFIG_FILE_NAME);
         
         if (!Files.exists(configPath)) {
             createDefaultConfig(configPath);
         }
+    }
+    
+    public static void loadAndRegister(MinecraftServer server) {
+        Path configPath = FabricLoader.getInstance().getConfigDir().resolve(CONFIG_FILE_NAME);
         
         try (BufferedReader reader = Files.newBufferedReader(configPath)) {
             JsonObject config = GSON.fromJson(reader, JsonObject.class);
@@ -67,28 +71,10 @@ public class PresetConfig {
             
             JsonObject defaultConfig = new JsonObject();
             defaultConfig.addProperty("_comment", "DimLib Custom Presets Configuration");
-            defaultConfig.addProperty("_docs", "");
+            defaultConfig.addProperty("_docs", "Add custom dimension presets here. Each preset needs: type (flat), biome, and layers array.");
+            defaultConfig.addProperty("_example", "{\"type\":\"flat\",\"biome\":\"minecraft:plains\",\"layers\":[{\"block\":\"minecraft:stone\",\"height\":1}]}");
             
             JsonObject presets = new JsonObject();
-            
-            JsonObject exampleFlat = new JsonObject();
-            exampleFlat.addProperty("type", "flat");
-            exampleFlat.addProperty("biome", "minecraft:plains");
-            JsonArray layers = new JsonArray();
-            layers.add(createLayer("minecraft:bedrock", 1));
-            layers.add(createLayer("minecraft:dirt", 3));
-            layers.add(createLayer("minecraft:grass_block", 1));
-            exampleFlat.add("layers", layers);
-            presets.add("example_flat", exampleFlat);
-            
-            JsonObject exampleVoid = new JsonObject();
-            exampleVoid.addProperty("type", "flat");
-            exampleVoid.addProperty("biome", "minecraft:the_void");
-            JsonArray voidLayers = new JsonArray();
-            voidLayers.add(createLayer("minecraft:air", 1));
-            exampleVoid.add("layers", voidLayers);
-            presets.add("example_void", exampleVoid);
-            
             defaultConfig.add("presets", presets);
             
             Files.writeString(path, GSON.toJson(defaultConfig));
@@ -96,13 +82,6 @@ public class PresetConfig {
         } catch (IOException e) {
             LOGGER.error("Failed to create default preset config: {}", e.getMessage());
         }
-    }
-    
-    private static JsonObject createLayer(String block, int height) {
-        JsonObject layer = new JsonObject();
-        layer.addProperty("block", block);
-        layer.addProperty("height", height);
-        return layer;
     }
     
     private static DimensionTemplate parsePreset(MinecraftServer server, String name, JsonObject data) {
@@ -143,30 +122,30 @@ public class PresetConfig {
         }
         
         return new DimensionTemplate(
-            net.minecraft.world.dimension.DimensionTypes.OVERWORLD,
+            net.minecraft.world.level.dimension.BuiltinDimensionTypes.OVERWORLD,
             (srv, dimTypeHolder) -> {
-                var registryManager = srv.getRegistryManager();
-                var biomeRegistry = registryManager.getOrThrow(RegistryKeys.BIOME);
+                var registryManager = srv.registryAccess();
+                var biomeRegistry = registryManager.lookupOrThrow(Registries.BIOME);
                 
-                RegistryKey<net.minecraft.world.biome.Biome> biomeKey = RegistryKey.of(RegistryKeys.BIOME, biomeIdentifier);
+                ResourceKey<net.minecraft.world.level.biome.Biome> biomeKey = ResourceKey.create(Registries.BIOME, biomeIdentifier);
                 var biomeHolder = biomeRegistry.getOrThrow(biomeKey);
                 
-                var config = new net.minecraft.world.gen.chunk.FlatChunkGeneratorConfig(
+                var config = new net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings(
                     Optional.empty(),
                     biomeHolder,
                     List.of()
                 );
                 
                 for (PresetLayer layer : layers) {
-                    Block block = Registries.BLOCK.get(layer.block);
-                    config.getLayers().add(new net.minecraft.world.gen.chunk.FlatChunkGeneratorLayer(
+                    Block block = BuiltInRegistries.BLOCK.getValue(layer.block);
+                    config.getLayersInfo().add(new net.minecraft.world.level.levelgen.flat.FlatLayerInfo(
                         layer.height, block
                     ));
                 }
                 
-                return new net.minecraft.world.dimension.DimensionOptions(
+                return new net.minecraft.world.level.dimension.LevelStem(
                     dimTypeHolder,
-                    new net.minecraft.world.gen.chunk.FlatChunkGenerator(config)
+                    new net.minecraft.world.level.levelgen.FlatLevelSource(config)
                 );
             }
         );

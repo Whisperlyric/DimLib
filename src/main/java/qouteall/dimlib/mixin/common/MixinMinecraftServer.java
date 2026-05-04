@@ -1,13 +1,13 @@
 package qouteall.dimlib.mixin.common;
 
 import com.google.common.collect.Maps;
-import net.minecraft.registry.RegistryKey;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.ServerTask;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.thread.ReentrantThreadExecutor;
-import net.minecraft.world.World;
-import net.minecraft.world.level.storage.LevelStorage;
+import net.minecraft.server.TickTask;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.thread.ReentrantBlockableEventLoop;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelStorageSource;
 import org.apache.commons.lang3.Validate;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,7 +29,7 @@ import java.util.concurrent.Executor;
 
 @Mixin(MinecraftServer.class)
 public abstract class MixinMinecraftServer
-    extends ReentrantThreadExecutor<ServerTask> implements IMinecraftServer {
+    extends ReentrantBlockableEventLoop<TickTask> implements IMinecraftServer {
     
     public MixinMinecraftServer(String name) {
         super(name);
@@ -39,17 +39,17 @@ public abstract class MixinMinecraftServer
     @Mutable
     @Shadow
     @Final
-    private Map<RegistryKey<World>, ServerWorld> worlds;
+    private Map<ResourceKey<Level>, ServerLevel> levels;
     
     @Shadow
     public abstract boolean isStopped();
     
     @Shadow
-    public abstract boolean isDedicated();
+    public abstract boolean isDedicatedServer();
     
     @Shadow
     @Final
-    protected LevelStorage.Session session;
+    protected LevelStorageSource.LevelStorageAccess storageSource;
     
     @Shadow
     protected abstract void waitForTasks();
@@ -63,7 +63,7 @@ public abstract class MixinMinecraftServer
     @Unique
     private List<Runnable> dimlib_taskList;
     
-    @Inject(method = "createWorlds", at = @At("HEAD"))
+    @Inject(method = "createLevels", at = @At("HEAD"))
     private void onBeforeCreateWorlds(CallbackInfo ci) {
         Validate.isTrue(
             !ip_canDirectlyRegisterDimension, "invalid server initialization status"
@@ -80,7 +80,7 @@ public abstract class MixinMinecraftServer
     }
     
     @Inject(
-        method = "createWorlds",
+        method = "createLevels",
         at = @At("RETURN")
     )
     private void onFinishedLoadingAllWorlds(
@@ -90,34 +90,34 @@ public abstract class MixinMinecraftServer
     }
     
     @Override
-    public void dimlib_addDimensionToWorldMap(RegistryKey<World> dim, ServerWorld world) {
+    public void dimlib_addDimensionToWorldMap(ResourceKey<Level> dim, ServerLevel world) {
         // use read-copy-update to avoid concurrency issues
-        LinkedHashMap<RegistryKey<World>, ServerWorld> newMap =
-            Maps.<RegistryKey<World>, ServerWorld>newLinkedHashMap();
+        LinkedHashMap<ResourceKey<Level>, ServerLevel> newMap =
+            Maps.<ResourceKey<Level>, ServerLevel>newLinkedHashMap();
         
-        Map<RegistryKey<World>, ServerWorld> oldMap = this.worlds;
+        Map<ResourceKey<Level>, ServerLevel> oldMap = this.levels;
         
         newMap.putAll(oldMap);
         newMap.put(dim, world);
         
-        this.worlds = newMap;
+        this.levels = newMap;
     }
     
     @Override
-    public void dimlib_removeDimensionFromWorldMap(RegistryKey<World> dimension) {
+    public void dimlib_removeDimensionFromWorldMap(ResourceKey<Level> dimension) {
         // use read-copy-update to avoid concurrency issues
-        LinkedHashMap<RegistryKey<World>, ServerWorld> newMap =
-            Maps.<RegistryKey<World>, ServerWorld>newLinkedHashMap();
+        LinkedHashMap<ResourceKey<Level>, ServerLevel> newMap =
+            Maps.<ResourceKey<Level>, ServerLevel>newLinkedHashMap();
         
-        Map<RegistryKey<World>, ServerWorld> oldMap = this.worlds;
+        Map<ResourceKey<Level>, ServerLevel> oldMap = this.levels;
         
-        for (Map.Entry<RegistryKey<World>, ServerWorld> entry : oldMap.entrySet()) {
+        for (Map.Entry<ResourceKey<Level>, ServerLevel> entry : oldMap.entrySet()) {
             if (entry.getKey() != dimension) {
                 newMap.put(entry.getKey(), entry.getValue());
             }
         }
         
-        this.worlds = newMap;
+        this.levels = newMap;
     }
     
     @Override
@@ -131,8 +131,8 @@ public abstract class MixinMinecraftServer
     }
     
     @Override
-    public LevelStorage.Session dimlib_getStorageSource() {
-        return session;
+    public LevelStorageSource.LevelStorageAccess dimlib_getStorageSource() {
+        return storageSource;
     }
     
     @Override
@@ -142,7 +142,7 @@ public abstract class MixinMinecraftServer
     
     @Override
     public void dimlib_waitUntilNextTick() {
-        Validate.isTrue(!isExecutionInProgress());
+        Validate.isTrue(!shouldRunAllTasks());
         
         waitForTasks();
     }
